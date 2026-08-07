@@ -13,7 +13,7 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: generate-token
         with:
-          app-id: ${{ secrets.APP_ID }}
+          client-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - uses: actions/checkout@v7
         with:
@@ -45,5 +45,5 @@ jobs:
           git switch -c "mise-upgrade-$MISE_VERSION"
           git add MISE_VERSION
           git commit -m "Upgrade mise to: $MISE_VERSION"
-          git push
+          git push -u origin HEAD
           gh pr create -f -a '@mietzen' -l 'auto-update'
