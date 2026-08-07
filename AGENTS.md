@@ -38,6 +38,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` does not (`0.12.0`).
 - PRs opened by automation carry the `auto-update` label and are assigned to `@mietzen`.
 - Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag.
+- Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
 - Release notes are auto-generated (`--generate-notes`).
 
 ## Required secrets/vars

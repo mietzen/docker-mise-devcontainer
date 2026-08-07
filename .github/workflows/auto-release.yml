@@ -41,15 +41,17 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo "0.0.0")
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo "v0.0.0")
           echo "Latest release tag: ${LATEST}"
-          NEW=$(echo "${LATEST}" | awk -F. '{$NF = $NF + 1; print $1"."$2"."$NF}')
+          PLAIN=${LATEST#v}
+          NEW=$(echo "${PLAIN}" | awk -F. '{$NF = $NF + 1; print $1"."$2"."$NF}')
           echo "Next version: ${NEW}"
           echo "new_version=${NEW}" >> $GITHUB_OUTPUT
+          echo "new_tag=v${NEW}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          gh release create "${{ steps.version.outputs.new_version }}" --generate-notes \
-            --title "v${{ steps.version.outputs.new_version }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }})"
+          gh release create "${{ steps.version.outputs.new_tag }}" --generate-notes \
+            --title "${{ steps.version.outputs.new_tag }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }})"
