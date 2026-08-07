@@ -37,8 +37,13 @@ USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # 3) mise (pinned) + built-in Node 24 + usage, installed via mise itself.
+#    Download to a file first: `curl | sh` masks curl's failure (the pipeline
+#    exit code is sh's, which exits 0 on empty stdin), so a 404 would silently
+#    "succeed" without installing anything.
 RUN set -eux; \
-    curl -fsSL https://mise.jdx.dev/install.sh | MISE_VERSION="${MISE_VERSION}" sh; \
+    curl -fsSL https://mise.jdx.dev/install.sh -o /tmp/mise-install.sh; \
+    MISE_VERSION="${MISE_VERSION}" sh /tmp/mise-install.sh; \
+    rm /tmp/mise-install.sh; \
     export PATH="/home/${USERNAME}/.local/share/mise/shims:/home/${USERNAME}/.local/bin:${PATH}"; \
     mise use --global node@24; \
     mise use --global usage@latest; \
@@ -47,8 +52,12 @@ RUN set -eux; \
 
 # 4) uv (pinned) via its own installer. The version goes in the URL path, not
 #    an env var (uv's installer hardcodes the version into the script).
+#    Same download-then-run pattern so a bad UV_VERSION fails the build.
 RUN set -eux; \
-    curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh;
+    curl -fsSL "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh; \
+    sh /tmp/uv-install.sh; \
+    rm /tmp/uv-install.sh; \
+    uv --version;
 
 # 5) Persistent volume mountpoint that the user may chown-ed via sudo.
 RUN mkdir -p /home/${USERNAME}/.persist;
