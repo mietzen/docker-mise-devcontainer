@@ -1,0 +1,48 @@
+name: Auto Updated mise
+
+on:
+  schedule:
+    - cron: "0 04 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-new-mise-release:
+    name: "Check for new releases"
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+      - id: new-release
+        run: |
+          REMOTE_MISE_VERSION=$(curl -s https://api.github.com/repos/jdx/mise/releases/latest | jq -r .tag_name | tr -d "[:space:]")
+          LOCAL_MISE_VERSION=$(cat MISE_VERSION)
+          if [ ! "${REMOTE_MISE_VERSION}" = "${LOCAL_MISE_VERSION}" ]; then
+            echo "release=TRUE" >> $GITHUB_OUTPUT
+            echo "version=${REMOTE_MISE_VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "release=FALSE" >> $GITHUB_OUTPUT
+          fi
+      - name: Get GitHub App User ID
+        id: get-user-id
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: echo "user-id=$(gh api "/users/${{ steps.generate-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+      - name: Create PR
+        if: ${{ steps.new-release.outputs.release == 'TRUE' }}
+        env:
+          MISE_VERSION: "${{ steps.new-release.outputs.version }}"
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          git config --global user.name '${{ steps.generate-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          echo "$MISE_VERSION" > MISE_VERSION
+          git switch -c "mise-upgrade-$MISE_VERSION"
+          git commit -m "Upgrade mise to: $MISE_VERSION"
+          git push
+          gh pr create -f -a '@mietzen' -l 'auto-update'

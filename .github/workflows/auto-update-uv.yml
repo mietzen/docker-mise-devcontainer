@@ -1,0 +1,48 @@
+name: Auto Updated UV
+
+on:
+  schedule:
+    - cron: "0 04 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-new-uv-release:
+    name: "Check for new releases"
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+      - id: new-release
+        run: |
+          REMOTE_UV_VERSION=$(curl -s https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r .tag_name | tr -d "[:space:]")
+          LOCAL_UV_VERSION=$(cat UV_VERSION)
+          if [ ! "${REMOTE_UV_VERSION}" = "${LOCAL_UV_VERSION}" ]; then
+            echo "release=TRUE" >> $GITHUB_OUTPUT
+            echo "version=${REMOTE_UV_VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "release=FALSE" >> $GITHUB_OUTPUT
+          fi
+      - name: Get GitHub App User ID
+        id: get-user-id
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: echo "user-id=$(gh api "/users/${{ steps.generate-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+      - name: Create PR
+        if: ${{ steps.new-release.outputs.release == 'TRUE' }}
+        env:
+          UV_VERSION: "${{ steps.new-release.outputs.version }}"
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          git config --global user.name '${{ steps.generate-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          echo "$UV_VERSION" > UV_VERSION
+          git switch -c "uv-upgrade-$UV_VERSION"
+          git commit -m "Upgrade uv to: $UV_VERSION"
+          git push
+          gh pr create -f -a '@mietzen' -l 'auto-update'
