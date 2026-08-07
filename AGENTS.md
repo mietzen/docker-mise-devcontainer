@@ -22,10 +22,12 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 
 ## Non-obvious things that break silently
 
+- **`curl ... | sh` masks curl failures in the Dockerfile.** A pipeline's exit status is the *last* command's (`sh`), which exits 0 on empty stdin — so a 404 from `curl -f` yields a "successful" build that installed nothing. Always download to a temp file (`curl -fsSL URL -o /tmp/x; sh /tmp/x; rm /tmp/x`) and verify the tool runs after (`uv --version`).
+- **`jq -r .tag_name` on a rate-limited/error API body prints the literal string `null`**, which the old version check then mistook for a real version and wrote into `MISE_VERSION`/`UV_VERSION`. Fetch with `curl -f`, read with `jq -r '.tag_name // empty'`, and treat an empty result as a no-op (`release=FALSE`) — a failed fetch must never open a bump PR.
 - **The auto-update flows must `git add` the version file before committing.** `auto-update-*.yml` write the new version, `git switch -c` a branch, then commit — omitting `git add MISE_VERSION` / `git add UV_VERSION` fails with `changes not staged for commit` and errors the run.
 - **The auto-update flows must push the new branch with `-u origin HEAD`.** A freshly created branch has no upstream, so a bare `git push` fails with `the current branch ... has no upstream branch`.
 - **The auto-update flows must be idempotent and reuse existing branches.** The branch name is deterministic (`mise-upgrade-$VERSION`). Re-running collides with a leftover remote branch and `git push` is rejected (`fetch first`). The flow must (1) skip if an open PR for that branch already exists, and (2) reuse the branch if it already exists — `git fetch` + `git switch` + `git pull --ff-only` (not `git switch -c`), else create it fresh.
-- **uv version pin goes in the URL path**, not an env var: `curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh"`. uv's installer hardcodes its version into the script; `UV_VERSION=... sh` is ignored.
+- **uv version pin goes in the URL path**, not an env var: `curl -fsSL "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh; sh /tmp/uv-install.sh`. uv's installer hardcodes its version into the script; `UV_VERSION=... sh` is ignored.
 - mise's installer *does* honor `MISE_VERSION` (and strips the `v` itself).
 - The GitHub App token action is `actions/create-github-app-token@v3` — the old `create-github-generate-token` name does not exist and fails at workflow parse. The input is `client-id` (an alias for the App ID — `app-id` is deprecated and emits a warning).
 - One GitHub App for everything: `APP_ID` + `APP_PRIVATE_KEY`. No separate merge app.
@@ -36,7 +38,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - **Branch protection is enabled on `main` — nothing is pushed to it directly. Every change goes through a new branch + pull request.** The auto-update flows follow this same path (feature branch → commit → push → PR).
 
 - Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` does not (`0.12.0`).
-- PRs opened by automation carry the `auto-update` label and are assigned to `@mietzen`.
+- PRs opened by automation carry the `auto-update` label and are assigned to `${{ github.repository_owner }}` (the workflow uses a template expression so it stays valid across forks).
 - Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag.
 - Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
 - Release bump level depends on the trigger: mise/uv updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.

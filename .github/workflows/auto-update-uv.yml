@@ -20,13 +20,17 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
       - id: new-release
         run: |
-          REMOTE_UV_VERSION=$(curl -s https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r .tag_name | tr -d "[:space:]")
+          # `-f` makes curl fail on a non-2xx/3xx (i.e. api rate limit / outage),
+          # and `// empty` turns a missing `.tag_name` into '' instead of the
+          # string "null". Guard: if we could not read the remote version, no-op
+          # so a failed fetch never writes garbage into UV_VERSION.
+          REMOTE_UV_VERSION=$(curl -fs https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r '.tag_name // empty' 2>/dev/null || true)
           LOCAL_UV_VERSION=$(cat UV_VERSION)
-          if [ ! "${REMOTE_UV_VERSION}" = "${LOCAL_UV_VERSION}" ]; then
+          if [ -z "${REMOTE_UV_VERSION}" ] || [ "${REMOTE_UV_VERSION}" = "${LOCAL_UV_VERSION}" ]; then
+            echo "release=FALSE" >> $GITHUB_OUTPUT
+          else
             echo "release=TRUE" >> $GITHUB_OUTPUT
             echo "version=${REMOTE_UV_VERSION}" >> $GITHUB_OUTPUT
-          else
-            echo "release=FALSE" >> $GITHUB_OUTPUT
           fi
       - name: Get GitHub App User ID
         id: get-user-id
@@ -61,4 +65,4 @@ jobs:
             git commit -m "Upgrade uv to: $UV_VERSION"
           fi
           git push -u origin "$BRANCH"
-          gh pr create -f -a '@mietzen' -l 'auto-update'
+          gh pr create -f -a '${{ github.repository_owner }}' -l 'auto-update'
