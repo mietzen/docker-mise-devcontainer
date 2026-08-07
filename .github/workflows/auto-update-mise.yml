@@ -43,6 +43,7 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com'
           echo "$MISE_VERSION" > MISE_VERSION
           git switch -c "mise-upgrade-$MISE_VERSION"
+          git add MISE_VERSION
           git commit -m "Upgrade mise to: $MISE_VERSION"
           git push
           gh pr create -f -a '@mietzen' -l 'auto-update'
