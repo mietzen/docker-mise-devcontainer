@@ -30,9 +30,9 @@ jobs:
         run: |
           echo "repo_name_lower_case=$(echo ${GITHUB_REPOSITORY@L} | cut -d'/' -f2)" >> $GITHUB_OUTPUT
           echo "build_matrix=$(cat .github/platforms.json | jq -c '.platforms | map(
-            if . == "linux/amd64" then {platform: ., runner: "ubuntu-latest", arch: "amd64"}
+            if . == "linux/amd64" then {platform: ., runner: "ubuntu-24.04", arch: "amd64"}
             elif . == "linux/arm64" then {platform: ., runner: "ubuntu-24.04-arm", arch: "arm64"}
-            else {platform: ., runner: "ubuntu-latest", arch: ""} end
+            else {platform: ., runner: "ubuntu-24.04", arch: ""} end
           )')" >> $GITHUB_OUTPUT
 
   Build:
