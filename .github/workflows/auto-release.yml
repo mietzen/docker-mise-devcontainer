@@ -1,0 +1,55 @@
+name: Auto Release
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: "Create GitHub release"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       (github.event.pull_request.user.login == 'dependabot[bot]' ||
+        contains(github.event.pull_request.labels.*.name, 'auto-update')))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate token
+        uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Read tool versions
+        id: versions
+        run: |
+          echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
+          echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Compute next version from latest release
+        id: version
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo "0.0.0")
+          echo "Latest release tag: ${LATEST}"
+          NEW=$(echo "${LATEST}" | awk -F. '{$NF = $NF + 1; print $1"."$2"."$NF}')
+          echo "Next version: ${NEW}"
+          echo "new_version=${NEW}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.new_version }}" --generate-notes \
+            --title "v${{ steps.version.outputs.new_version }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }})"
