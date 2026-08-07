@@ -1,32 +1,35 @@
 # Mise Devcontainer
 
-Base image for vscode devcontainers with mise, uv and zsh. The image is automatically built, released and pushed as soon as a new Debian base image, mise or uv release is available.
+Base image for [devcontainers](https://containers.dev/overview) with mise, uv and zsh. The image is automatically built, released and pushed as soon as a new Debian base image, mise or uv release is available.
 
-## Features:
+## Usage
 
-- Debian `trixie` (slim)
+Use this image as base for your [mise](https://mise.jdx.dev/) [devcontainers](https://containers.dev/):
+
+```json
+{
+  "image": "mietzen/mise-devcontainer:latest"
+}
+```
+
+## Features
+
 - [mise](https://mise.jdx.dev/) pinned via `MISE_VERSION`, with **Node 24** and **usage** preinstalled
 - [uv](https://docs.astral.sh/uv/) pinned via `UV_VERSION`
 - zsh + oh-my-zsh with mise activated
-- Non-root user `vscode` (uid/gid 1000)
+- Non-root user `vscode` (uid/gid 1000), can only use `sudo` to own persistent volumes
 
 ## Persistent volume
 
-Mount a persistent volume at `/home/vscode/.persist`. `vscode` can make it writable with a single sudo command:
+Mount your persistent volume(s) at `/home/vscode/.persist`. `vscode` can make it writable with a single sudo command:
 
 ```shell
 sudo chown -R vscode:vscode /home/vscode/.persist
 ```
 
-## Versioning
+In your [`postCreateCommand`](https://containers.dev/implementors/json_reference/#lifecycle-scripts).
 
-Every merged update PR creates a GitHub release. The bump level depends on the trigger: mise/uv updates bump the minor version, Debian base image updates bump the patch. The image is tagged with:
-
-- `:1.2.3`
-- `:1.2.3-mise-v2026.8.0-uv0.12.0`
-- `:latest`
-
-## How it works
+## Auto updates
 
 The image is rebuilt and released automatically when one of the upstream inputs changes:
 
@@ -36,7 +39,7 @@ The image is rebuilt and released automatically when one of the upstream inputs 
 - `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
 - `docker-image.yml` builds and pushes the tags. On pull requests it only builds.
 
-## Preparation
+## Preparation on forking
 
 ### GitHub App
 
