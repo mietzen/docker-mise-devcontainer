@@ -1,10 +1,10 @@
 # Mise Devcontainer
 
-Base image for [devcontainers](https://containers.dev/overview) with mise, uv and zsh. The image is automatically built, released and pushed as soon as a new Debian base image, mise or uv release is available.
+Base image for [devcontainers](https://containers.dev/overview) with [`mise`](https://mise.jdx.dev/), [`uv`](https://docs.astral.sh/uv/) and [`zsh`](https://github.com/zsh-users/zsh). The image is automatically built, released and pushed as soon as a new [Debian base image](https://hub.docker.com/_/debian), [`mise`](https://mise.jdx.dev/) or [`uv`](https://docs.astral.sh/uv/) release is available.
 
 ## Usage
 
-Use this image as base for your [mise](https://mise.jdx.dev/) [devcontainers](https://containers.dev/):
+Use this image as base for your [`mise`](https://mise.jdx.dev/) [devcontainer](https://containers.dev/):
 
 ```json
 {
@@ -14,9 +14,9 @@ Use this image as base for your [mise](https://mise.jdx.dev/) [devcontainers](ht
 
 ## Features
 
-- [mise](https://mise.jdx.dev/) pinned via `MISE_VERSION`, with **Node 24** and **usage** preinstalled
-- [uv](https://docs.astral.sh/uv/) pinned via `UV_VERSION`
-- zsh + oh-my-zsh with mise activated
+- [`mise`](https://mise.jdx.dev/) pinned via `MISE_VERSION` ([**Node 24**](https://mise.jdx.dev/lang/node.html) and [**usage**](https://usage.jdx.dev/) preinstalled)
+- [`uv`](https://docs.astral.sh/uv/) pinned via `UV_VERSION`
+- [`zsh`](https://github.com/zsh-users/zsh) + [`oh-my-zsh`](https://github.com/ohmyzsh/ohmyzsh) with mise activated
 - Non-root user `vscode` (uid/gid 1000), can only use `sudo` to own persistent volumes
 
 ## Persistent volume
@@ -39,7 +39,9 @@ The image is rebuilt and released automatically when one of the upstream inputs 
 - `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
 - `docker-image.yml` builds and pushes the tags. On pull requests it only builds.
 
-## Preparation on forking
+## Forking
+
+Feel free to fork this repository and edit it to your needs, to get CI running you will need the following:
 
 ### GitHub App
 
@@ -59,12 +61,3 @@ The workflows authenticate with a single GitHub App to create PRs, merge them an
 |---|---|---|
 | `DOCKER_HUB_USERNAME` | Docker Hub account to push under | `github.repository_owner` |
 | `IMAGE_NAME` | Image name on Docker Hub | repo name (lowercased) |
-
-## Local build
-
-```shell
-docker build \
-  --build-arg MISE_VERSION="$(cat MISE_VERSION)" \
-  --build-arg UV_VERSION="$(cat UV_VERSION)" \
-  -t mise-devcontainer:local .
-```
