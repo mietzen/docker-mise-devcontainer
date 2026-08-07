@@ -23,9 +23,10 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 ## Non-obvious things that break silently
 
 - **The auto-update flows must `git add` the version file before committing.** `auto-update-*.yml` write the new version, `git switch -c` a branch, then commit — omitting `git add MISE_VERSION` / `git add UV_VERSION` fails with `changes not staged for commit` and errors the run.
+- **The auto-update flows must push the new branch with `-u origin HEAD`.** A freshly created branch has no upstream, so a bare `git push` fails with `the current branch ... has no upstream branch`.
 - **uv version pin goes in the URL path**, not an env var: `curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh"`. uv's installer hardcodes its version into the script; `UV_VERSION=... sh` is ignored.
 - mise's installer *does* honor `MISE_VERSION` (and strips the `v` itself).
-- The GitHub App token action is `actions/create-github-app-token@v3` — the old `create-github-generate-token` name does not exist and fails at workflow parse.
+- The GitHub App token action is `actions/create-github-app-token@v3` — the old `create-github-generate-token` name does not exist and fails at workflow parse. The input is `client-id` (an alias for the App ID — `app-id` is deprecated and emits a warning).
 - One GitHub App for everything: `APP_ID` + `APP_PRIVATE_KEY`. No separate merge app.
 - `docker-image.yml` reads `VERSION`, `MISE_VERSION`, `UV_VERSION` from the files at checkout — the release event fires after `release.yml` has already committed the bump, so `cat VERSION` is correct; do not bump again in the build workflow.
 
