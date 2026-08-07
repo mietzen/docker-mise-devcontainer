@@ -1,0 +1,68 @@
+name: Auto Release
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: "Create GitHub release"
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       (github.event.pull_request.user.login == 'dependabot[bot]' ||
+        contains(github.event.pull_request.labels.*.name, 'auto-update')))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate token
+        uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Read tool versions
+        id: versions
+        run: |
+          echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
+          echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Compute next version from latest release
+        id: version
+        env:
+          IS_AUTO_UPDATE: ${{ contains(github.event.pull_request.labels.*.name, 'auto-update') }}
+        run: |
+          # Same pattern as auto-update-*.yml; curl -f fails on HTTP errors (404
+          # when there are no releases), so the fallback to v0.0.0 is clean.
+          PLAIN=$(curl -fs "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r '.tag_name // empty' 2>/dev/null || echo "v0.0.0")
+          PLAIN=${PLAIN#v}
+          LATEST="${PLAIN:-0.0.0}"
+          MAJOR=$(echo "${LATEST}" | cut -d. -f1)
+          MINOR=$(echo "${LATEST}" | cut -d. -f2)
+          PATCH=$(echo "${LATEST}" | cut -d. -f3)
+          if [[ "${IS_AUTO_UPDATE}" == "true" ]]; then
+            # mise / uv update -> minor
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            # dependabot docker base image update (or manual dispatch) -> patch
+            PATCH=$((PATCH + 1))
+          fi
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=${NEW}" >> $GITHUB_OUTPUT
+          echo "new_tag=v${NEW}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.new_tag }}" --generate-notes \
+            --title "${{ steps.version.outputs.new_tag }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }})"

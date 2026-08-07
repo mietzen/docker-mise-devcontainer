@@ -22,7 +22,8 @@ jobs:
       - name: Load versions
         id: versions
         run: |
-          echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+          TAG="${{ github.event.release.tag_name }}"
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
           echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
       - name: Compute matrix + image name

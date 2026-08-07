@@ -9,15 +9,15 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - `Dockerfile` — single-stage `debian:trixie-slim` image. `ARG MISE_VERSION` / `ARG UV_VERSION` are required build args. Installs mise (with node@24 + usage) and uv pinned to those args, oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo.
 - `.zshrc` — minimal config for the `vscode` user; activates mise. Copied into the image by the Dockerfile.
 - `MISE_VERSION` / `UV_VERSION` — pinned versions of the tools. The source of truth for the auto-update workflow and the Dockerfile build args.
-- `VERSION` — semver image release. Bumped by `release.yml` on every merged auto-update PR.
+- Image versioning comes from the GitHub release tag (computed by `auto-release.yml` from the latest release via the API); there is no `VERSION` file.
 - `.github/workflows/` — the automation (below).
 - `.github/platforms.json` — build platforms (`linux/amd64`, `linux/arm64`).
 
 ## The update pipeline (event chain)
 
 1. `auto-update-mise.yml` / `auto-update-uv.yml` — daily schedule. Compare upstream latest release against the version file; if newer, open a PR with the `auto-update` label. A mismatch or no update is a no-op (output `release=FALSE`, PR step skipped).
-2. `auto-merge-dependabot.yml` — squash-auto-merge for dependabot PRs and any PR with the `auto-update` label.
-3. `release.yml` — on merged auto-update PRs: bump `VERSION` (patch), commit, push, `gh release create`.
+2. `auto-merge.yml` — squash-auto-merge for dependabot PRs and any PR with the `auto-update` label.
+3. `auto-release.yml` — on merged auto-update PRs (or `workflow_dispatch`): compute the next patch version from the latest GitHub release via the API, then `gh release create` (API call, no commit/push to `main`).
 4. `docker-image.yml` — on `release: published`: build multi-arch, push tags. On plain PRs: build only, no push.
 
 ## Non-obvious things that break silently
@@ -29,7 +29,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - mise's installer *does* honor `MISE_VERSION` (and strips the `v` itself).
 - The GitHub App token action is `actions/create-github-app-token@v3` — the old `create-github-generate-token` name does not exist and fails at workflow parse. The input is `client-id` (an alias for the App ID — `app-id` is deprecated and emits a warning).
 - One GitHub App for everything: `APP_ID` + `APP_PRIVATE_KEY`. No separate merge app.
-- `docker-image.yml` reads `VERSION`, `MISE_VERSION`, `UV_VERSION` from the files at checkout — the release event fires after `release.yml` has already committed the bump, so `cat VERSION` is correct; do not bump again in the build workflow.
+- `docker-image.yml` reads the version from the release event (`github.event.release.tag_name`) — the release is created before the build workflow runs, so the tag is always present. `MISE_VERSION` / `UV_VERSION` still come from the files at checkout; do not bump versions in the build workflow.
 
 ## Conventions
 
@@ -37,7 +37,9 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 
 - Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` does not (`0.12.0`).
 - PRs opened by automation carry the `auto-update` label and are assigned to `@mietzen`.
-- Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`.
+- Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag.
+- Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
+- Release bump level depends on the trigger: mise/uv updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
 - Release notes are auto-generated (`--generate-notes`).
 
 ## Required secrets/vars
