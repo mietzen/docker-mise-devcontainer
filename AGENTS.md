@@ -39,6 +39,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - PRs opened by automation carry the `auto-update` label and are assigned to `@mietzen`.
 - Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag.
 - Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
+- Release bump level depends on the trigger: mise/uv updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
 - Release notes are auto-generated (`--generate-notes`).
 
 ## Required secrets/vars

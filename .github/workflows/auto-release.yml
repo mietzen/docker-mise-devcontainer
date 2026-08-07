@@ -39,13 +39,24 @@ jobs:
       - name: Compute next version from latest release
         id: version
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          IS_AUTO_UPDATE: ${{ contains(github.event.pull_request.labels.*.name, 'auto-update') }}
         run: |
-          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo "v0.0.0")
-          echo "Latest release tag: ${LATEST}"
-          PLAIN=${LATEST#v}
-          NEW=$(echo "${PLAIN}" | awk -F. '{$NF = $NF + 1; print $1"."$2"."$NF}')
-          echo "Next version: ${NEW}"
+          # Same pattern as auto-update-*.yml; curl -f fails on HTTP errors (404
+          # when there are no releases), so the fallback to v0.0.0 is clean.
+          PLAIN=$(curl -fs "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r '.tag_name // empty' 2>/dev/null || echo "v0.0.0")
+          PLAIN=${PLAIN#v}
+          LATEST="${PLAIN:-0.0.0}"
+          MAJOR=$(echo "${LATEST}" | cut -d. -f1)
+          MINOR=$(echo "${LATEST}" | cut -d. -f2)
+          PATCH=$(echo "${LATEST}" | cut -d. -f3)
+          if [[ "${IS_AUTO_UPDATE}" == "true" ]]; then
+            # mise / uv update -> minor
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            # dependabot docker base image update (or manual dispatch) -> patch
+            PATCH=$((PATCH + 1))
+          fi
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
           echo "new_version=${NEW}" >> $GITHUB_OUTPUT
           echo "new_tag=v${NEW}" >> $GITHUB_OUTPUT
 

@@ -20,7 +20,7 @@ sudo chown -R vscode:vscode /home/vscode/.persist
 
 ## Versioning
 
-Every merged auto-update PR creates a GitHub release with the next patch version. The image is tagged with:
+Every merged update PR creates a GitHub release. The bump level depends on the trigger: mise/uv updates bump the minor version, Debian base image updates bump the patch. The image is tagged with:
 
 - `:1.2.3`
 - `:1.2.3-mise-v2026.8.0-uv0.12.0`
@@ -33,7 +33,7 @@ The image is rebuilt and released automatically when one of the upstream inputs 
 - Dependabot proposes updates for the Debian base image and the GitHub Actions.
 - The auto-update workflows run daily and open a PR when a new mise or uv release is available.
 - Auto-merge squash-merges the PR once the build check passes.
-- `auto-release.yml` creates a GitHub release with the next patch version.
+- `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
 - `docker-image.yml` builds and pushes the tags. On pull requests it only builds.
 
 ## Preparation
