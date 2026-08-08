@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   release:
@@ -23,7 +24,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      # auto-merge merges every dependabot PR, but only the docker-ecosystem
+      # PR (Debian base image -> Dockerfile change) should release. Dependabot
+      # also bumps the GitHub Actions, which change no image input: merge them
+      # to main without a release.
+      - name: Check if this PR should release
+        id: release-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release="true"
+          if [[ "${{ github.event.pull_request.user.login }}" == "dependabot[bot]" ]]; then
+            files="$(gh pr view "${{ github.event.pull_request.number }}" --json files --jq '.files[].path')"
+            if ! echo "${files}" | grep -qx "Dockerfile"; then
+              echo "GitHub Actions update - merging without a release"
+              release="false"
+            fi
+          fi
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+
       - name: Generate token
+        if: steps.release-check.outputs.release == 'true'
         uses: actions/create-github-app-token@v3
         id: generate-token
         with:
@@ -31,6 +52,7 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Read tool versions
+        if: steps.release-check.outputs.release == 'true'
         id: versions
         run: |
           echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
@@ -38,6 +60,7 @@ jobs:
           echo "docker=$(cat DOCKER_VERSION)" >> $GITHUB_OUTPUT
 
       - name: Compute next version from latest release
+        if: steps.release-check.outputs.release == 'true'
         id: version
         env:
           IS_AUTO_UPDATE: ${{ contains(github.event.pull_request.labels.*.name, 'auto-update') }}
@@ -62,6 +85,7 @@ jobs:
           echo "new_tag=v${NEW}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: steps.release-check.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |

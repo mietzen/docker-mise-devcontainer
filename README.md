@@ -48,7 +48,7 @@ In your [`postCreateCommand`](https://containers.dev/implementors/json_reference
 
 The image is rebuilt and released automatically when one of the upstream inputs changes:
 
-- Dependabot proposes updates for the Debian base image and the GitHub Actions.
+- Dependabot proposes updates for the Debian base image and the GitHub Actions. GitHub Actions updates are merged without a release — only the Debian base image bump triggers one.
 - The auto-update workflows run daily and open a PR when a new mise, uv or docker release is available.
 - Auto-merge squash-merges the PR once the build check passes.
 - `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
