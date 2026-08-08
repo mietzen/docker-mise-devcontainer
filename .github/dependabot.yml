@@ -4,12 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-      time: "16:00"
+      time: "22:00"
       timezone: "Europe/Berlin"
   - package-ecosystem: "github-actions"
     directory: "/.github/workflows"
     schedule:
       interval: "weekly"
-      time: "08:00"
+      time: "10:00"
       day: "saturday"
       timezone: "Europe/Berlin"
