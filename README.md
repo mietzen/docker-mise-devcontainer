@@ -12,6 +12,21 @@ Use this image as base for your [`mise`](https://mise.jdx.dev/) [devcontainer](h
 }
 ```
 
+## Docker-in-Docker image
+
+A second image adds a Docker daemon to the same base: `mietzen/mise-devcontainer-did`. Use it when the devcontainer itself needs to run containers (e.g. to test the project's own Docker build).
+
+It must run privileged:
+
+```json
+{
+  "image": "mietzen/mise-devcontainer-did:latest",
+  "runArgs": ["--privileged"]
+}
+```
+
+The container starts as root only to boot `dockerd`, then drops to the `vscode` user. `vscode` reaches the daemon via the `docker` group — no sudo needed. `docker compose` is included.
+
 ## Features
 
 - [`mise`](https://mise.jdx.dev/) pinned via `MISE_VERSION`, no tools preinstalled (add them per-project via a `.mise.toml` in your repo)

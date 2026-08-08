@@ -59,20 +59,27 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
-      - name: Build native arch image
+      - name: Build images
         env:
           ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
+          CACHE_SCOPE: build-${{ matrix.arch }}
         run: |
-          echo "Building native ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
-          echo "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
-          docker buildx build \
-            --platform "${{ matrix.platform }}" \
-            --build-arg MISE_VERSION="${MISE_VERSION}" \
-            --build-arg UV_VERSION="${UV_VERSION}" \
-            $ACTION \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-            -f Dockerfile .
-
+          for target in base did; do
+            repo="${DOCKER_USER}/${IMAGE_NAME}"
+            [ "$target" = "did" ] && repo="${repo}-did"
+            tag="${repo}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
+            echo "Building ${target} ($GITHUB_EVENT_NAME): ${tag}"
+            docker buildx build \
+              --platform "${{ matrix.platform }}" \
+              --build-arg MISE_VERSION="${MISE_VERSION}" \
+              --build-arg UV_VERSION="${UV_VERSION}" \
+              --target "${target}" \
+              --cache-from "type=gha,scope=${CACHE_SCOPE}" \
+              --cache-to "type=gha,mode=max,scope=${CACHE_SCOPE}" \
+              $ACTION \
+              --tag "${tag}" \
+              -f Dockerfile .
+          done
   Manifest:
     if: github.event_name == 'release'
     needs:
@@ -95,18 +102,29 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
-      - name: Create and push multi-arch manifest
+      - name: Create and push multi-arch manifest for mise
         run: |
           echo "Combining ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
           docker buildx imagetools create \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:latest" \
-            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-amd64" \
-            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-arm64"
+            $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
 
-      - name: Inspect published manifest
+      - name: Inspect published manifest for mise
         run: docker buildx imagetools inspect "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}"
+
+      - name: Create and push multi-arch manifest for mise-did
+        run: |
+          echo "Combining ${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
+          docker buildx imagetools create \
+            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}" \
+            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
+            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:latest" \
+            $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
+
+      - name: Inspect published manifest for mise-did
+        run: docker buildx imagetools inspect "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}"
 
   Check-Build:
     if: ${{ always() }}
