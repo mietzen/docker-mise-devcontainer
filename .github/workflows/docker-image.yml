@@ -74,17 +74,22 @@ jobs:
             -f Dockerfile .
 
       - name: Build DiD image
-        env:
-          ACTION: ${{ github.event_name == 'release' && '--push' || '--load --pull=false' }}
         run: |
           echo "Building DiD ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
           echo "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
-          docker buildx build \
-            --platform "${{ matrix.platform }}" \
-            --build-arg MISE_DEVCONTAINER_IMAGE="${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-            $ACTION \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-            -f Dockerfile.did .
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            docker buildx build \
+              --platform "${{ matrix.platform }}" \
+              --build-arg MISE_DEVCONTAINER_IMAGE="${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
+              --push \
+              --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
+              -f Dockerfile.did .
+          else
+            docker build \
+              --build-arg MISE_DEVCONTAINER_IMAGE="${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
+              --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
+              -f Dockerfile.did .
+          fi
   Manifest:
     if: github.event_name == 'release'
     needs:
