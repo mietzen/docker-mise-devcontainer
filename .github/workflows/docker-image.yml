@@ -75,7 +75,7 @@ jobs:
 
       - name: Build DiD image
         env:
-          ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
+          ACTION: ${{ github.event_name == 'release' && '--push' || '--load --pull=false' }}
         run: |
           echo "Building DiD ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
           echo "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
