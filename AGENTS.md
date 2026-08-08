@@ -6,7 +6,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 
 ## Repo layout
 
-- `Dockerfile` — single-stage `debian:trixie-slim` image. `ARG MISE_VERSION` / `ARG UV_VERSION` are required build args. Installs mise (with node@24 + usage) and uv pinned to those args, oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo.
+- `Dockerfile` — single-stage `debian:trixie-slim` image. `ARG MISE_VERSION` / `ARG UV_VERSION` are required build args. Installs mise and uv pinned to those args (no tools preinstalled — projects add them via `.mise.toml`), oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo.
 - `.zshrc` — minimal config for the `vscode` user; activates mise. Copied into the image by the Dockerfile.
 - `MISE_VERSION` / `UV_VERSION` — pinned versions of the tools. The source of truth for the auto-update workflow and the Dockerfile build args.
 - Image versioning comes from the GitHub release tag (computed by `auto-release.yml` from the latest release via the API); there is no `VERSION` file.
@@ -61,5 +61,5 @@ Follow the style of the owner's other repos (github.com/mietzen) — the README 
 
 ## Validating changes
 
-- Dockerfile: build locally with the version files as build args; run the image and check mise/uv/node/usage versions, the `vscode` user, and the sudo rule.
+- Dockerfile: build locally with the version files as build args; run the image and check mise/uv versions, the `vscode` user, and the sudo rule.
 - Workflows: the YAML must parse. Check version output names (`version`/`mise`/`uv`) match what the build step consumes.

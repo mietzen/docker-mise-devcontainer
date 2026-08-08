@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.5
 
-# Base for a vscode devcontainer: Debian + mise (with node + usage), uv,
+# Minimal base for a vscode devcontainer: Debian + mise + uv,
 # zsh/oh-my-zsh, and a non-root user with scoped sudo for a persistent volume.
 #
 # Build args are threaded in by the release workflow:
@@ -36,19 +36,15 @@ printf '%s\n' \
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
-# 3) mise (pinned) + built-in Node 24 + usage, installed via mise itself.
-#    Download to a file first: `curl | sh` masks curl's failure (the pipeline
-#    exit code is sh's, which exits 0 on empty stdin), so a 404 would silently
-#    "succeed" without installing anything.
+# 3) mise (pinned), no additional tools pinned in; users add them per-project
+#    via a .mise.toml in their own repo. Download to a file first: `curl | sh`
+#    masks curl's failure (the pipeline exit code is sh's, which exits 0 on
+#    empty stdin), so a 404 would silently "succeed" without installing anything.
 RUN set -eux; \
     curl -fsSL https://mise.jdx.dev/install.sh -o /tmp/mise-install.sh; \
     MISE_VERSION="${MISE_VERSION}" sh /tmp/mise-install.sh; \
     rm /tmp/mise-install.sh; \
-    export PATH="/home/${USERNAME}/.local/share/mise/shims:/home/${USERNAME}/.local/bin:${PATH}"; \
-    mise use --global node@24; \
-    mise use --global usage@latest; \
-    mise install; \
-    mise reshim;
+    mise --version;
 
 # 4) uv (pinned) via its own installer. The version goes in the URL path, not
 #    an env var (uv's installer hardcodes the version into the script).

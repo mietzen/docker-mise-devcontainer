@@ -14,7 +14,7 @@ Use this image as base for your [`mise`](https://mise.jdx.dev/) [devcontainer](h
 
 ## Features
 
-- [`mise`](https://mise.jdx.dev/) pinned via `MISE_VERSION` ([**Node 24**](https://mise.jdx.dev/lang/node.html) and [**usage**](https://usage.jdx.dev/) preinstalled)
+- [`mise`](https://mise.jdx.dev/) pinned via `MISE_VERSION`, no tools preinstalled (add them per-project via a `.mise.toml` in your repo)
 - [`uv`](https://docs.astral.sh/uv/) pinned via `UV_VERSION`
 - [`zsh`](https://github.com/zsh-users/zsh) + [`oh-my-zsh`](https://github.com/ohmyzsh/ohmyzsh) with mise activated
 - Non-root user `vscode` (uid/gid 1000), can only use `sudo` to own persistent volumes
