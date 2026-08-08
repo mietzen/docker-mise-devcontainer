@@ -25,7 +25,7 @@ It must run privileged:
 }
 ```
 
-The `vscode` user gets access to the daemon via the `docker` group — no sudo needed. `docker compose` is included.
+The container starts as root only to boot `dockerd`, then drops to the `vscode` user. `vscode` reaches the daemon via the `docker` group — no sudo needed. `docker compose` is included.
 
 ## Features
 

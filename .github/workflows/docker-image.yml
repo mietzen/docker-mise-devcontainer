@@ -59,37 +59,27 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
-      - name: Build mise image
+      - name: Build images
         env:
           ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
+          CACHE_SCOPE: build-${{ matrix.arch }}
         run: |
-          echo "Building mise ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
-          echo "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
-          docker buildx build \
-            --platform "${{ matrix.platform }}" \
-            --build-arg MISE_VERSION="${MISE_VERSION}" \
-            --build-arg UV_VERSION="${UV_VERSION}" \
-            $ACTION \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-            -f Dockerfile .
-
-      - name: Build DiD image
-        run: |
-          echo "Building DiD ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
-          echo "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
-          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+          for target in base did; do
+            repo="${DOCKER_USER}/${IMAGE_NAME}"
+            [ "$target" = "did" ] && repo="${repo}-did"
+            tag="${repo}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
+            echo "Building ${target} ($GITHUB_EVENT_NAME): ${tag}"
             docker buildx build \
               --platform "${{ matrix.platform }}" \
-              --build-arg MISE_DEVCONTAINER_IMAGE="${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-              --push \
-              --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-              -f Dockerfile.did .
-          else
-            docker build \
-              --build-arg MISE_DEVCONTAINER_IMAGE="${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-              --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
-              -f Dockerfile.did .
-          fi
+              --build-arg MISE_VERSION="${MISE_VERSION}" \
+              --build-arg UV_VERSION="${UV_VERSION}" \
+              --target "${target}" \
+              --cache-from "type=gha,scope=${CACHE_SCOPE}" \
+              --cache-to "type=gha,mode=max,scope=${CACHE_SCOPE}" \
+              $ACTION \
+              --tag "${tag}" \
+              -f Dockerfile .
+          done
   Manifest:
     if: github.event_name == 'release'
     needs:

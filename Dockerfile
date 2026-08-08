@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1.5
-FROM debian:trixie-20260803-slim
+
+# Default target: the mise devcontainer base image.
+# Alternative target `did`: same image plus a Docker daemon (docker-in-docker).
+# Building `--target did` resolves FROM base as a stage within the same build,
+# so no image push/daemon load is needed between the two targets.
+FROM debian:trixie-20260803-slim AS base
 
 ARG MISE_VERSION
 ARG UV_VERSION
@@ -55,3 +60,30 @@ RUN set -eux; \
 RUN mkdir -p /home/${USERNAME}/.persist;
 
 CMD ["/usr/bin/zsh"]
+
+# --- docker-in-docker variant ---------------------------------------------
+FROM base AS did
+
+ARG USERNAME=vscode
+
+# dockerd must run as root; the exec'd command runs as vscode afterwards
+# (docker-init.sh drops privileges via setpriv to the docker group).
+USER root
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        docker.io docker-cli docker-compose; \
+    rm -rf /var/lib/apt/lists/*; \
+    usermod -aG docker "${USERNAME}";
+
+# Start dockerd on container start, then run the container command as vscode.
+COPY docker-init.sh /usr/local/share/docker-init.sh
+RUN chmod +x /usr/local/share/docker-init.sh
+
+ENTRYPOINT ["/usr/local/share/docker-init.sh"]
+CMD ["/usr/bin/zsh"]
+
+# Keep the default push target = the plain base image (docker build without
+# --target builds the last stage).
+FROM base
