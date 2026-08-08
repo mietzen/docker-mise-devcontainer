@@ -52,7 +52,7 @@ The image is rebuilt and released automatically when one of the upstream inputs 
 - The auto-update workflows run daily and open a PR when a new mise, uv or docker release is available.
 - Auto-merge squash-merges the PR once the build check passes.
 - `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
-- `docker-image.yml` builds and pushes the tags. On pull requests it only builds.
+- `docker-image.yml` builds and pushes the tags. It only rebuilds an image when its inputs changed (a docker-only update rebuilds just `-did`; the plain image keeps its previous build under the new version tag). On pull requests it only builds.
 
 ## Forking
 

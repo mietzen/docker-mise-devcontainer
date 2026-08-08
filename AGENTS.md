@@ -19,7 +19,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 1. `auto-update-mise.yml` / `auto-update-uv.yml` / `auto-update-docker.yml` — daily schedule. Compare upstream latest release against the version file; if newer, open a PR with the `auto-update` label. A mismatch or no update is a no-op (output `release=FALSE`, PR step skipped).
 2. `auto-merge.yml` — squash-auto-merge for dependabot PRs and any PR with the `auto-update` label.
 3. `auto-release.yml` — on merged auto-update PRs (or `workflow_dispatch`): compute the next patch version from the latest GitHub release via the API, then `gh release create` (API call, no commit/push to `main`).
-4. `docker-image.yml` — on `release: published`: build multi-arch, push tags. On plain PRs: build only, no push.
+4. `docker-image.yml` — on `release: published`: build multi-arch, push tags. On plain PRs: build only, no push. It diffs the version files/Dockerfile between the new release tag and the previous one and only rebuilds the targets whose inputs changed (`base` for mise/uv/Debian-base, `did` for those plus docker); a skipped target is re-tagged from the previous release's manifest so its `:${VERSION}`/`:latest` tags stay present. When the diff can't be determined, it builds both.
 
 ## Non-obvious things that break silently
 
@@ -43,6 +43,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` and `DOCKER_VERSION` do not (`0.12.0`, `29.7.2`).
 - PRs opened by automation carry the `auto-update` label and are assigned to `${{ github.repository_owner }}` (the workflow uses a template expression so it stays valid across forks).
 - Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag. The DiD variant gets the same tags on `${IMAGE_NAME}-did`. Both images are built in the same matrix job, each from its own `--target` (`base` / `did`) of the same Dockerfile — the `did` stage `FROM base` resolves in the same solve, so the base never has to exist on a registry for the DiD build.
+- A release that only bumps docker (no mise/uv/Dockerfile change) rebuilds only the `did` target; the plain image's `:${VERSION}` and `:latest` tags are re-pointed to the previous release's manifest instead of being rebuilt.
 - Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
 - Release bump level depends on the trigger: mise/uv/docker updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
 - Release notes are auto-generated (`--generate-notes`).
