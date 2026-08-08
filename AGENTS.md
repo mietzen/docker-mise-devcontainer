@@ -7,11 +7,13 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 ## Repo layout
 
 - `Dockerfile` — single-stage `debian:trixie-slim` image. `ARG MISE_VERSION` / `ARG UV_VERSION` are required build args. Installs mise and uv pinned to those args (no tools preinstalled — projects add them via `.mise.toml`), oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo.
+- `Dockerfile.did` — Docker-in-Docker variant: `FROM` the base image (build arg `MISE_DEVCONTAINER_IMAGE`) plus a Docker daemon, client and compose. Installs `docker.io docker-cli docker-compose`, adds `vscode` to the `docker` group, and copies `docker-init.sh` as ENTRYPOINT.
+- `docker-init.sh` — starts `dockerd` (`--host=unix:///var/run/docker.sock --group docker`) if no socket is present, then `exec`s the container command. Needs a privileged container at runtime.
 - `.zshrc` — minimal config for the `vscode` user; activates mise. Copied into the image by the Dockerfile.
 - `MISE_VERSION` / `UV_VERSION` — pinned versions of the tools. The source of truth for the auto-update workflow and the Dockerfile build args.
 - Image versioning comes from the GitHub release tag (computed by `auto-release.yml` from the latest release via the API); there is no `VERSION` file.
 - `.github/workflows/` — the automation (below).
-- `.github/platforms.json` — build platforms (`linux/amd64`, `linux/arm64`).
+- `.github/platforms.yml` — build platforms (`linux/amd64`, `linux/arm64`), parsed with `yq` in the build workflow.
 
 ## The update pipeline (event chain)
 
@@ -39,7 +41,7 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 
 - Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` does not (`0.12.0`).
 - PRs opened by automation carry the `auto-update` label and are assigned to `${{ github.repository_owner }}` (the workflow uses a template expression so it stays valid across forks).
-- Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag.
+- Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag. The DiD variant gets the same tags on `${IMAGE_NAME}-did`. Both images are built in the same matrix job; the DiD build takes the base image as `MISE_DEVCONTAINER_IMAGE` (the arch-specific base tag of that run).
 - Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
 - Release bump level depends on the trigger: mise/uv updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
 - Release notes are auto-generated (`--generate-notes`).
@@ -62,4 +64,5 @@ Follow the style of the owner's other repos (github.com/mietzen) — the README 
 ## Validating changes
 
 - Dockerfile: build locally with the version files as build args; run the image and check mise/uv versions, the `vscode` user, and the sudo rule.
+- Dockerfile.did: build locally with `MISE_DEVCONTAINER_IMAGE` pointing at the local base build; run privileged (`docker run --privileged`) and check `docker info`, a nested `docker run`, `docker compose version`, and `vscode` in the `docker` group.
 - Workflows: the YAML must parse. Check version output names (`version`/`mise`/`uv`) match what the build step consumes.
