@@ -22,7 +22,7 @@ jobs:
       - name: Load versions
         id: versions
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.release.tag_name || 'main' }}"
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
           echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
