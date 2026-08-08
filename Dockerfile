@@ -65,15 +65,33 @@ CMD ["/usr/bin/zsh"]
 FROM base AS did
 
 ARG USERNAME=vscode
+ARG DOCKER_VERSION
 
 # dockerd must run as root; the exec'd command runs as vscode afterwards
 # (docker-init.sh drops privileges via setpriv to the docker group).
 USER root
 
+# Docker Engine from the official repository (download.docker.com), pinned to
+# DOCKER_VERSION. The Debian docker.io package lags upstream by many releases
+# and ships no buildx/compose plugins.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        docker.io docker-cli docker-compose; \
+        gnupg iptables erofs-utils; \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /tmp/docker.gpg; \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg; \
+    rm /tmp/docker.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian trixie stable" \
+        > /etc/apt/sources.list.d/docker.list; \
+    apt-get update; \
+    DOCKER_CE_VERSION=$(apt-cache madison docker-ce-cli | awk -v d="5:${DOCKER_VERSION}" '$0 ~ d {print $3; exit}'); \
+    test -n "${DOCKER_CE_VERSION}"; \
+    apt-get install -y --no-install-recommends \
+        "docker-ce=${DOCKER_CE_VERSION}" \
+        "docker-ce-cli=${DOCKER_CE_VERSION}" \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin; \
     rm -rf /var/lib/apt/lists/*; \
     usermod -aG docker "${USERNAME}";
 

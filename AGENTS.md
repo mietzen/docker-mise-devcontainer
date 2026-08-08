@@ -2,21 +2,21 @@
 
 ## What this repo is
 
-A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: it tracks three upstream inputs (Debian base image, mise, uv), builds a multi-arch image from them, and publishes it — fully automated.
+A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: it tracks four upstream inputs (Debian base image, mise, uv, docker), builds a multi-arch image from them, and publishes it — fully automated.
 
 ## Repo layout
 
-- `Dockerfile` — multi-stage: `debian:trixie-slim` base stage (`base`) builds the mise/uv devcontainer image; a second stage (`did`) is the `-did` image with a Docker daemon. Default target is `base` (a trailing `FROM base` keeps plain `docker build` producing the base image). Build the `did` stage with `--target did` — `FROM base` resolves as a stage in the same solve, no registry/daemon round-trip between the two targets. `ARG MISE_VERSION` / `ARG UV_VERSION` are required build args. Installs mise and uv pinned to those args (no tools preinstalled — projects add them via `.mise.toml`), oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo.
+- `Dockerfile` — multi-stage: `debian:trixie-slim` base stage (`base`) builds the mise/uv devcontainer image; a second stage (`did`) is the `-did` image with a Docker daemon. Default target is `base` (a trailing `FROM base` keeps plain `docker build` producing the base image). Build the `did` stage with `--target did` — `FROM base` resolves as a stage in the same solve, no registry/daemon round-trip between the two targets. `ARG MISE_VERSION` / `ARG UV_VERSION` / `ARG DOCKER_VERSION` are required build args. Installs mise and uv pinned to those args (no tools preinstalled — projects add them via `.mise.toml`), oh-my-zsh, non-root `vscode` user, `.persist` mountpoint, scoped sudo. The `did` stage installs Docker Engine from the official `download.docker.com` repo (not the Debian `docker.io` package) pinned to `DOCKER_VERSION`, plus the buildx and compose plugins.
 - `.zshrc` — minimal config for the `vscode` user; activates mise. Copied into the image by the Dockerfile.
-- `docker-init.sh` — ENTRYPOINT of the `did` stage: starts `dockerd` (`--host=unix:///var/run/docker.sock --group docker`) if no socket is present, then drops privileges to the `vscode` user (`setpriv`) and `exec`s the container command. Needs a privileged container at runtime.
-- `MISE_VERSION` / `UV_VERSION` — pinned versions of the tools. The source of truth for the auto-update workflow and the Dockerfile build args.
+- `docker-init.sh` — ENTRYPOINT of the `did` stage: prepares the runtime (cgroup v2 nesting, tmpfs `/tmp`, securityfs, `--make-rshared /`), starts `dockerd` (`--host=unix:///var/run/docker.sock --group docker`) if no socket is present, then drops privileges to the `vscode` user (`setpriv`) and `exec`s the container command. Needs a privileged container at runtime.
+- `MISE_VERSION` / `UV_VERSION` / `DOCKER_VERSION` — pinned versions of the tools. Sources of truth for the auto-update workflow and the Dockerfile build args.
 - Image versioning comes from the GitHub release tag (computed by `auto-release.yml` from the latest release via the API); there is no `VERSION` file.
 - `.github/workflows/` — the automation (below).
 - `.github/platforms.yml` — build platforms (`linux/amd64`, `linux/arm64`), parsed with `yq` in the build workflow.
 
 ## The update pipeline (event chain)
 
-1. `auto-update-mise.yml` / `auto-update-uv.yml` — daily schedule. Compare upstream latest release against the version file; if newer, open a PR with the `auto-update` label. A mismatch or no update is a no-op (output `release=FALSE`, PR step skipped).
+1. `auto-update-mise.yml` / `auto-update-uv.yml` / `auto-update-docker.yml` — daily schedule. Compare upstream latest release against the version file; if newer, open a PR with the `auto-update` label. A mismatch or no update is a no-op (output `release=FALSE`, PR step skipped).
 2. `auto-merge.yml` — squash-auto-merge for dependabot PRs and any PR with the `auto-update` label.
 3. `auto-release.yml` — on merged auto-update PRs (or `workflow_dispatch`): compute the next patch version from the latest GitHub release via the API, then `gh release create` (API call, no commit/push to `main`).
 4. `docker-image.yml` — on `release: published`: build multi-arch, push tags. On plain PRs: build only, no push.
@@ -30,19 +30,21 @@ A Docker Hub base image for vscode devcontainers. The repo is a build pipeline: 
 - **The auto-update flows must be idempotent and reuse existing branches.** The branch name is deterministic (`mise-upgrade-$VERSION`). Re-running collides with a leftover remote branch and `git push` is rejected (`fetch first`). The flow must (1) skip if an open PR for that branch already exists, and (2) reuse the branch if it already exists — `git fetch` + `git switch` + `git pull --ff-only` (not `git switch -c`), else create it fresh.
 - **uv version pin goes in the URL path**, not an env var: `curl -fsSL "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh; sh /tmp/uv-install.sh`. uv's installer hardcodes its version into the script; `UV_VERSION=... sh` is ignored.
 - mise's installer *does* honor `MISE_VERSION` (and strips the `v` itself).
+- **The `did` stage must not use Debian's `docker.io` package.** trixie's `docker.io` lags upstream by many releases (security postures included) and ships no buildx/compose plugins. It installs `docker-ce`/`docker-ce-cli` from the official `download.docker.com` repo. The version is pinned via `apt-cache madison` matching `5:${DOCKER_VERSION}` (Docker's Debian packages carry an `5:` epoch prefix), so a `DOCKER_VERSION` bump must land in the repo before the package exists or the build fails.
+- **dockerd's socket appears before the daemon is ready.** `docker-init.sh` waits on `docker info`, not on the socket file's existence — dockerd binds the socket before network setup, and a daemon that dies there (e.g. iptables without privileges) leaves a stale socket that a `[ -S ]` check would mistake for success. Run the `did` image with `--privileged`; anything less makes dockerd fail on iptables and the init dumps the dockerd log and exits.
 - The GitHub App token action is `actions/create-github-app-token@v3` — the old `create-github-generate-token` name does not exist and fails at workflow parse. The input is `client-id` (an alias for the App ID — `app-id` is deprecated and emits a warning).
 - One GitHub App for everything: `APP_ID` + `APP_PRIVATE_KEY`. No separate merge app.
-- `docker-image.yml` reads the version from the release event (`github.event.release.tag_name`) — the release is created before the build workflow runs, so the tag is always present. `MISE_VERSION` / `UV_VERSION` still come from the files at checkout; do not bump versions in the build workflow.
+- `docker-image.yml` reads the version from the release event (`github.event.release.tag_name`) — the release is created before the build workflow runs, so the tag is always present. `MISE_VERSION` / `UV_VERSION` / `DOCKER_VERSION` still come from the files at checkout; do not bump versions in the build workflow.
 
 ## Conventions
 
 - **Branch protection is enabled on `main` — nothing is pushed to it directly. Every change goes through a new branch + pull request.** The auto-update flows follow this same path (feature branch → commit → push → PR).
 
-- Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` does not (`0.12.0`).
+- Version files are single-line, no trailing spaces: `MISE_VERSION` keeps its `v` prefix (`v2026.8.0`), `UV_VERSION` and `DOCKER_VERSION` do not (`0.12.0`, `29.7.2`).
 - PRs opened by automation carry the `auto-update` label and are assigned to `${{ github.repository_owner }}` (the workflow uses a template expression so it stays valid across forks).
 - Image tags: `:${VERSION}`, `:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}`, `:latest`, where `VERSION` is the release tag. The DiD variant gets the same tags on `${IMAGE_NAME}-did`. Both images are built in the same matrix job, each from its own `--target` (`base` / `did`) of the same Dockerfile — the `did` stage `FROM base` resolves in the same solve, so the base never has to exist on a registry for the DiD build.
 - Release tags carry a `v` prefix (`v0.1.0`); image tags do not (`0.1.0`). `docker-image.yml` strips the `v` via `${TAG#v}`.
-- Release bump level depends on the trigger: mise/uv updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
+- Release bump level depends on the trigger: mise/uv/docker updates (`auto-update` label) bump **minor**; dependabot docker base image updates (and manual `workflow_dispatch`) bump **patch**.
 - Release notes are auto-generated (`--generate-notes`).
 
 ## Required secrets/vars

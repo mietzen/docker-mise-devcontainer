@@ -12,6 +12,7 @@ jobs:
       version: ${{ steps.versions.outputs.version }}
       mise: ${{ steps.versions.outputs.mise }}
       uv: ${{ steps.versions.outputs.uv }}
+      docker: ${{ steps.versions.outputs.docker }}
       repo_name_lower_case: ${{ steps.compute.outputs.repo_name_lower_case }}
       build_matrix: ${{ steps.compute.outputs.build_matrix }}
     steps:
@@ -26,6 +27,7 @@ jobs:
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
           echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
+          echo "docker=$(cat DOCKER_VERSION)" >> $GITHUB_OUTPUT
       - name: Compute matrix + image name
         id: compute
         run: |
@@ -45,6 +47,7 @@ jobs:
       VERSION: ${{ needs.Setup.outputs.version }}
       MISE_VERSION: ${{ needs.Setup.outputs.mise }}
       UV_VERSION: ${{ needs.Setup.outputs.uv }}
+      DOCKER_VERSION: ${{ needs.Setup.outputs.docker }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -73,6 +76,7 @@ jobs:
               --platform "${{ matrix.platform }}" \
               --build-arg MISE_VERSION="${MISE_VERSION}" \
               --build-arg UV_VERSION="${UV_VERSION}" \
+              --build-arg DOCKER_VERSION="${DOCKER_VERSION}" \
               --target "${target}" \
               --cache-from "type=gha,scope=${CACHE_SCOPE}" \
               --cache-to "type=gha,mode=max,scope=${CACHE_SCOPE}" \
