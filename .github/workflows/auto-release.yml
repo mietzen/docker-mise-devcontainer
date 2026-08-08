@@ -35,6 +35,7 @@ jobs:
         run: |
           echo "mise=$(cat MISE_VERSION)" >> $GITHUB_OUTPUT
           echo "uv=$(cat UV_VERSION)" >> $GITHUB_OUTPUT
+          echo "docker=$(cat DOCKER_VERSION)" >> $GITHUB_OUTPUT
 
       - name: Compute next version from latest release
         id: version
@@ -65,4 +66,4 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           gh release create "${{ steps.version.outputs.new_tag }}" --generate-notes \
-            --title "${{ steps.version.outputs.new_tag }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }})"
+            --title "${{ steps.version.outputs.new_tag }} (mise ${{ steps.versions.outputs.mise }}, uv ${{ steps.versions.outputs.uv }}, docker ${{ steps.versions.outputs.docker }})"

@@ -1,0 +1,64 @@
+name: Auto Updated Docker
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-new-docker-release:
+    name: "Check for new releases"
+    runs-on: "ubuntu-24.04"
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+      - id: new-release
+        run: |
+          REMOTE_DOCKER_VERSION=$(curl -fs https://api.github.com/repos/moby/moby/releases/latest | jq -r '.tag_name // empty' 2>/dev/null | sed 's/^v//' || true)
+          LOCAL_DOCKER_VERSION=$(cat DOCKER_VERSION)
+          if [ -z "${REMOTE_DOCKER_VERSION}" ] || [ "${REMOTE_DOCKER_VERSION}" = "${LOCAL_DOCKER_VERSION}" ]; then
+            echo "release=FALSE" >> $GITHUB_OUTPUT
+          else
+            echo "release=TRUE" >> $GITHUB_OUTPUT
+            echo "version=${REMOTE_DOCKER_VERSION}" >> $GITHUB_OUTPUT
+          fi
+      - name: Get GitHub App User ID
+        id: get-user-id
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: echo "user-id=$(gh api "/users/${{ steps.generate-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+      - name: Create PR
+        if: ${{ steps.new-release.outputs.release == 'TRUE' }}
+        env:
+          DOCKER_VERSION: "${{ steps.new-release.outputs.version }}"
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          BRANCH="docker-upgrade-$DOCKER_VERSION"
+
+          if gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -q '[1-9]'; then
+            echo "PR for $BRANCH already open — skipping"
+            exit 0
+          fi
+          git config --global user.name '${{ steps.generate-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+          if git ls-remote --exit-code origin "$BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BRANCH"
+            git switch "$BRANCH"
+            git pull --ff-only origin "$BRANCH"
+          else
+            git switch -c "$BRANCH"
+          fi
+          echo "$DOCKER_VERSION" > DOCKER_VERSION
+          git add DOCKER_VERSION
+          if ! git diff --cached --quiet; then
+            git commit -m "Upgrade Docker to: $DOCKER_VERSION"
+          fi
+          git push -u origin "$BRANCH"
+          gh pr create -f -l 'auto-update'

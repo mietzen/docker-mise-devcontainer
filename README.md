@@ -25,7 +25,7 @@ It must run privileged:
 }
 ```
 
-The container starts as root only to boot `dockerd`, then drops to the `vscode` user. `vscode` reaches the daemon via the `docker` group — no sudo needed. `docker compose` is included.
+The container starts as root only to boot `dockerd`, then drops to the `vscode` user. `vscode` reaches the daemon via the `docker` group — no sudo needed. `docker buildx` and `docker compose` are included.
 
 ## Features
 
@@ -49,7 +49,7 @@ In your [`postCreateCommand`](https://containers.dev/implementors/json_reference
 The image is rebuilt and released automatically when one of the upstream inputs changes:
 
 - Dependabot proposes updates for the Debian base image and the GitHub Actions.
-- The auto-update workflows run daily and open a PR when a new mise or uv release is available.
+- The auto-update workflows run daily and open a PR when a new mise, uv or docker release is available.
 - Auto-merge squash-merges the PR once the build check passes.
 - `auto-release.yml` creates a GitHub release (minor for mise/uv, patch for the Debian base image).
 - `docker-image.yml` builds and pushes the tags. On pull requests it only builds.
