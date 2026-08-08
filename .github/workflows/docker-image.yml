@@ -93,6 +93,9 @@ jobs:
       MISE_VERSION: ${{ needs.Setup.outputs.mise }}
       UV_VERSION: ${{ needs.Setup.outputs.uv }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
