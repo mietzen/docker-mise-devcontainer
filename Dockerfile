@@ -95,6 +95,10 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     usermod -aG docker "${USERNAME}";
 
+# Only the docker CLI ships a "completion" subcommand; buildx and compose do not.
+RUN docker completion zsh > /home/${USERNAME}/.oh-my-zsh/lib/docker.zsh \
+    && chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.oh-my-zsh/lib/docker.zsh
+
 # Start dockerd on container start, then run the container command as vscode.
 COPY docker-init.sh /usr/local/share/docker-init.sh
 RUN chmod +x /usr/local/share/docker-init.sh
