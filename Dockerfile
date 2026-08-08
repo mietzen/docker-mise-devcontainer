@@ -49,8 +49,7 @@ RUN set -eux; \
     sh /tmp/uv-install.sh; \
     rm /tmp/uv-install.sh; \
     uv --version; \
-    uv generate-shell-completion zsh > /home/${USERNAME}/.oh-my-zsh/lib/uvx.zsh; \
-    uvx --generate-shell-completion zsh > /home/${USERNAME}/.oh-my-zsh/lib/uvx.zsh
+    uv generate-shell-completion zsh > /home/${USERNAME}/.oh-my-zsh/lib/uv.zsh
 
 # Persistent volume mountpoint
 RUN mkdir -p /home/${USERNAME}/.persist;
