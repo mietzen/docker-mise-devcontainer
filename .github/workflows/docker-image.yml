@@ -15,11 +15,14 @@ jobs:
       docker: ${{ steps.versions.outputs.docker }}
       repo_name_lower_case: ${{ steps.compute.outputs.repo_name_lower_case }}
       build_matrix: ${{ steps.compute.outputs.build_matrix }}
+      targets: ${{ steps.targets.outputs.targets }}
+      prev_version: ${{ steps.targets.outputs.prev_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          fetch-tags: true
       - name: Load versions
         id: versions
         run: |
@@ -33,6 +36,44 @@ jobs:
         run: |
           echo "repo_name_lower_case=$(echo ${GITHUB_REPOSITORY@L} | cut -d'/' -f2)" >> $GITHUB_OUTPUT
           echo "build_matrix=$(cat .github/platforms.yml | yq -o j --indent 0)" >> $GITHUB_OUTPUT
+      # A release usually bumps a single input. Rebuild a target only when one
+      # of its inputs actually changed since the previous release; otherwise
+      # the Manifest job re-tags it from the previous release's content.
+      # Inputs: base = MISE_VERSION, UV_VERSION, Dockerfile (Debian base),
+      # .zshrc; did = base + DOCKER_VERSION + docker-init.sh.
+      - name: Determine changed targets (release only)
+        id: targets
+        run: |
+          base=true
+          did=true
+          prev_version=""
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            current_tag="${{ github.event.release.tag_name }}"
+            prev_tag="$(git tag --list 'v*' --sort=-version:refname | grep -v "^${current_tag}$" | head -n1 || true)"
+            if [[ -n "${prev_tag}" ]]; then
+              base=false
+              did=false
+              changed=$(git diff --name-only "${prev_tag}" "${current_tag}" 2>/dev/null) || {
+                # Can't determine what changed; build everything rather than skip.
+                base=true
+                did=true
+              }
+              for f in ${changed}; do
+                case "${f}" in
+                  MISE_VERSION|UV_VERSION|Dockerfile|.zshrc) base=true ;;
+                  DOCKER_VERSION|docker-init.sh) did=true ;;
+                esac
+              done
+              # The did image embeds the base image, so any base change rebuilds did too.
+              [[ "${base}" == "true" ]] && did=true
+              prev_version="${prev_tag#v}"
+            fi
+          fi
+          targets=""
+          [[ "${base}" == "true" ]] && targets="${targets} base"
+          [[ "${did}" == "true" ]] && targets="${targets} did"
+          echo "targets=${targets}" >> $GITHUB_OUTPUT
+          echo "prev_version=${prev_version}" >> $GITHUB_OUTPUT
 
   Build:
     needs: Setup
@@ -67,7 +108,12 @@ jobs:
           ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
           CACHE_SCOPE: build-${{ matrix.arch }}
         run: |
-          for target in base did; do
+          targets="${{ needs.Setup.outputs.targets }}"
+          if [[ -z "${targets}" ]]; then
+            echo "No targets changed for this release; nothing to build"
+            exit 0
+          fi
+          for target in ${targets}; do
             repo="${DOCKER_USER}/${IMAGE_NAME}"
             [ "$target" = "did" ] && repo="${repo}-did"
             tag="${repo}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
@@ -84,6 +130,7 @@ jobs:
               --tag "${tag}" \
               -f Dockerfile .
           done
+
   Manifest:
     if: github.event_name == 'release'
     needs:
@@ -109,29 +156,49 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
+      # A skipped target is re-tagged from the previous release's manifest so
+      # :${VERSION} and :latest never disappear or go stale.
       - name: Create and push multi-arch manifest for mise
         run: |
-          echo "Combining ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
-          docker buildx imagetools create \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:latest" \
-            $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
-
-      - name: Inspect published manifest for mise
-        run: docker buildx imagetools inspect "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}"
+          img="${DOCKER_USER}/${IMAGE_NAME}"
+          prev="${{ needs.Setup.outputs.prev_version }}"
+          if [[ " ${{ needs.Setup.outputs.targets }} " == *" base "* ]]; then
+            echo "Combining ${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
+            docker buildx imagetools create \
+              --tag "${img}:${VERSION}" \
+              --tag "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
+              --tag "${img}:latest" \
+              $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
+          else
+            echo "mise unchanged, re-tagging previous build ${img}:${prev}"
+            docker buildx imagetools create \
+              --tag "${img}:${VERSION}" \
+              --tag "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
+              --tag "${img}:latest" \
+              "${img}:${prev}"
+          fi
+          docker buildx imagetools inspect "${img}:${VERSION}"
 
       - name: Create and push multi-arch manifest for mise-did
         run: |
-          echo "Combining ${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
-          docker buildx imagetools create \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}" \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}-did:latest" \
-            $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
-
-      - name: Inspect published manifest for mise-did
-        run: docker buildx imagetools inspect "${DOCKER_USER}/${IMAGE_NAME}-did:${VERSION}"
+          img="${DOCKER_USER}/${IMAGE_NAME}-did"
+          prev="${{ needs.Setup.outputs.prev_version }}"
+          if [[ " ${{ needs.Setup.outputs.targets }} " == *" did "* ]]; then
+            echo "Combining ${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
+            docker buildx imagetools create \
+              --tag "${img}:${VERSION}" \
+              --tag "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
+              --tag "${img}:latest" \
+              $(for i in $(yq '.[].arch' .github/platforms.yml); do echo "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-$i"; done)
+          else
+            echo "docker unchanged, re-tagging previous build ${img}:${prev}"
+            docker buildx imagetools create \
+              --tag "${img}:${VERSION}" \
+              --tag "${img}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
+              --tag "${img}:latest" \
+              "${img}:${prev}"
+          fi
+          docker buildx imagetools inspect "${img}:${VERSION}"
 
   Check-Build:
     if: ${{ always() }}
