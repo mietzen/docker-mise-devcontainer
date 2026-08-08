@@ -7,7 +7,7 @@ on:
 
 jobs:
   Setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.versions.outputs.version }}
       mise: ${{ steps.versions.outputs.mise }}
@@ -30,11 +30,7 @@ jobs:
         id: compute
         run: |
           echo "repo_name_lower_case=$(echo ${GITHUB_REPOSITORY@L} | cut -d'/' -f2)" >> $GITHUB_OUTPUT
-          echo "build_matrix=$(cat .github/platforms.json | jq -c '.platforms | map(
-            if . == "linux/amd64" then {platform: ., runner: "ubuntu-24.04", arch: "amd64"}
-            elif . == "linux/arm64" then {platform: ., runner: "ubuntu-24.04-arm", arch: "arm64"}
-            else {platform: ., runner: "ubuntu-24.04", arch: ""} end
-          )')" >> $GITHUB_OUTPUT
+          echo "build_matrix=$(cat .github/platforms.yml | yq -o j --indent 0)" >> $GITHUB_OUTPUT
 
   Build:
     needs: Setup
@@ -49,7 +45,6 @@ jobs:
       VERSION: ${{ needs.Setup.outputs.version }}
       MISE_VERSION: ${{ needs.Setup.outputs.mise }}
       UV_VERSION: ${{ needs.Setup.outputs.uv }}
-      BUILD: ${{ github.run_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -64,27 +59,18 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
-      - name: Build and load (pull requests)
-        if: github.event_name != 'release'
+      - name: Build and native arch image
+        env:
+          ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
         run: |
-          echo "Building: ${IMAGE_NAME}  platform: ${{ matrix.platform }}  (native ${{ matrix.arch }})"
+          echo "Building native ${{ matrix.arch }} ($GITHUB_EVENT_NAME):"
+          echo "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}"
           docker buildx build \
             --platform "${{ matrix.platform }}" \
             --build-arg MISE_VERSION="${MISE_VERSION}" \
             --build-arg UV_VERSION="${UV_VERSION}" \
-            --load \
-            -f Dockerfile .
-
-      - name: Build and push native arch image (release)
-        if: github.event_name == 'release'
-        run: |
-          echo "Building native ${{ matrix.arch }}: ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${BUILD}-${{ matrix.arch }}"
-          docker buildx build \
-            --platform "${{ matrix.platform }}" \
-            --build-arg MISE_VERSION="${MISE_VERSION}" \
-            --build-arg UV_VERSION="${UV_VERSION}" \
-            --push \
-            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${BUILD}-${{ matrix.arch }}" \
+            $ACTION \
+            --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-${{ matrix.arch }}" \
             -f Dockerfile .
 
   Manifest:
@@ -92,14 +78,13 @@ jobs:
     needs:
       - Setup
       - Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       DOCKER_USER: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME || needs.Setup.outputs.repo_name_lower_case }}
       VERSION: ${{ needs.Setup.outputs.version }}
       MISE_VERSION: ${{ needs.Setup.outputs.mise }}
       UV_VERSION: ${{ needs.Setup.outputs.uv }}
-      BUILD: ${{ github.run_number }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -112,20 +97,20 @@ jobs:
 
       - name: Create and push multi-arch manifest
         run: |
-          echo "Combining ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${BUILD}-{amd64,arm64}"
+          echo "Combining ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-{amd64,arm64}"
           docker buildx imagetools create \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}" \
             --tag "${DOCKER_USER}/${IMAGE_NAME}:latest" \
-            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${BUILD}-amd64" \
-            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-${BUILD}-arm64"
+            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-amd64" \
+            "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}-mise-${MISE_VERSION}-uv-${UV_VERSION}-arm64"
 
       - name: Inspect published manifest
         run: docker buildx imagetools inspect "${DOCKER_USER}/${IMAGE_NAME}:${VERSION}"
 
   Check-Build:
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - Build
       - Manifest

@@ -11,7 +11,7 @@ permissions:
 jobs:
   release:
     name: "Create GitHub release"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
