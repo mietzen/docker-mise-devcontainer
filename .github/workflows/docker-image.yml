@@ -59,7 +59,7 @@ jobs:
           username: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
           password: ${{ secrets.DOCKER_HUB_DEPLOY_KEY }}
 
-      - name: Build and native arch image
+      - name: Build native arch image
         env:
           ACTION: ${{ github.event_name == 'release' && '--push' || '--load' }}
         run: |
