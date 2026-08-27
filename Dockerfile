@@ -4,7 +4,7 @@
 # Alternative target `did`: same image plus a Docker daemon (docker-in-docker).
 # Building `--target did` resolves FROM base as a stage within the same build,
 # so no image push/daemon load is needed between the two targets.
-FROM debian:trixie-20260803-slim AS base
+FROM debian:trixie-20260824-slim AS base
 
 ARG MISE_VERSION
 ARG UV_VERSION
