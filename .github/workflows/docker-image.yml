@@ -7,7 +7,7 @@ on:
 
 jobs:
   Setup:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.versions.outputs.version }}
       mise: ${{ steps.versions.outputs.mise }}
@@ -136,7 +136,7 @@ jobs:
     needs:
       - Setup
       - Build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     env:
       DOCKER_USER: ${{ vars.DOCKER_HUB_USERNAME || github.repository_owner }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME || needs.Setup.outputs.repo_name_lower_case }}
@@ -202,7 +202,7 @@ jobs:
 
   Check-Build:
     if: ${{ always() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - Build
       - Manifest

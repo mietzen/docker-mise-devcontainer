@@ -8,7 +8,7 @@ on:
 jobs:
   check-new-mise-release:
     name: "Check for new releases"
-    runs-on: "ubuntu-24.04"
+    runs-on: "ubuntu-26.04"
     steps:
       - uses: actions/create-github-app-token@v3
         id: generate-token
